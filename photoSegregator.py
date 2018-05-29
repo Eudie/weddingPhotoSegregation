@@ -26,7 +26,7 @@ class Segregator:
         self.file_names = [os.path.join(root, filename)
                            for root, directories, filenames in os.walk(self.directory)
                            for filename in filenames
-                           if filename.lower().endswith(('.png', '.jpg', '.jpeg'))]
+                           if filename.lower().endswith(('.jpg', '.jpeg'))]
 
     def extract_faces(self, scale_down=10, batch_size=32):
         """
@@ -34,7 +34,8 @@ class Segregator:
         :scale_down: factor by which images will be scaled down for processing
         """
         # TODO
-        self.face_dir = os.path.join(self.directory, '..', 'face_' + os.path.basename(os.path.normpath(self.directory)))
+        last_folder = os.path.basename(os.path.normpath(self.directory))
+        self.face_dir = os.path.join(self.directory, '..', 'face_' + last_folder)
         if not os.path.exists(self.face_dir):
             os.makedirs(self.face_dir)
 
@@ -44,18 +45,28 @@ class Segregator:
             batch_images = []
             compressed_batch_images = []
             files = []
-            for file in self.file_names[i*batch_size:end]:
+
+            for index, file in enumerate(self.file_names[i*batch_size:end]):
+                print(file)
                 image = cv2.imread(file)
 
                 l, b, d = image.shape
-                if l > b:
-                    new_l = b
-                    new_b = b * b // l
-                    padding_b = l - new_b
-                    padding = np.zeros((b, padding_b, d), dtype=np.uint8)
+
+                if index == 0:
+                    batch_l, batch_b = min(l, b), max(l, b)
+
+                if not (l == batch_l and b == batch_b):
+                    new_l = batch_l
+                    new_b = b * batch_l//l
                     dim = (new_b, new_l)
                     image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
-                    image = np.concatenate((image, padding), axis=1)
+
+                    if new_b < batch_b:
+                        padding_b = batch_b - new_b
+                        padding = np.zeros((batch_l, padding_b, d), dtype=np.uint8)
+                        image = np.concatenate((image, padding), axis=1)
+                    else:
+                        image = image[:, :batch_b, :]
 
                 width = int(image.shape[1] / scale_down)
                 height = int(image.shape[0] / scale_down)
@@ -74,7 +85,9 @@ class Segregator:
                 for index, face in enumerate(face_locations):
                     face = tuple(scale_down * x for x in face)
                     crop_face = image[face[0]:face[2], face[3]:face[1], :]
-                    face_file_name = os.path.join(self.face_dir, "__".join((str(index), os.path.split(file)[1])))
+                    face_file_name = os.path.join(self.face_dir, "__".join((str(index),
+                                                                            last_folder,
+                                                                            os.path.split(file)[1])))
                     cv2.imwrite(face_file_name, crop_face)
 
 
