@@ -28,7 +28,7 @@ class Segregator:
                            for filename in filenames
                            if filename.lower().endswith(('.png', '.jpg', '.jpeg'))]
 
-    def extract_faces(self, scale_down=10):
+    def extract_faces(self, scale_down=10, batch_size=32):
         """
         This function extract all the faces from the photos in the main directory
         :scale_down: factor by which images will be scaled down for processing
@@ -38,20 +38,44 @@ class Segregator:
         if not os.path.exists(self.face_dir):
             os.makedirs(self.face_dir)
 
-        for file in self.file_names:
-            image = cv2.imread(file)
-            width = int(image.shape[1] / scale_down)
-            height = int(image.shape[0] / scale_down)
-            dim = (width, height)
-            resize_image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+        number_of_batches = len(self.file_names)//batch_size + 1
+        for i in range(number_of_batches):
+            end = min(len(self.file_names), (i+1)*batch_size)
+            batch_images = []
+            compressed_batch_images = []
+            files = []
+            for file in self.file_names[i*batch_size:end]:
+                image = cv2.imread(file)
+
+                l, b, d = image.shape
+                if l > b:
+                    new_l = b
+                    new_b = b * b // l
+                    padding_b = l - new_b
+                    padding = np.zeros((b, padding_b, d), dtype=np.uint8)
+                    dim = (new_b, new_l)
+                    image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+                    image = np.concatenate((image, padding), axis=1)
+
+                width = int(image.shape[1] / scale_down)
+                height = int(image.shape[0] / scale_down)
+                dim = (width, height)
+                compressed_batch_images.append(cv2.resize(image, dim, interpolation=cv2.INTER_AREA))
+                batch_images.append(image)
+                files.append(file)
             # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            face_locations = face_recognition.face_locations(resize_image, model="cnn")
-            for index, face in enumerate(face_locations):
-                face = tuple(scale_down * x for x in face)
-                crop_face = image[face[0]:face[2], face[3]:face[1], :]
-                face_file_name = os.path.join(self.face_dir, "__".join((str(index), os.path.split(file)[1])))
-                cv2.imwrite(face_file_name, crop_face)
+            batch_face_locations = face_recognition.batch_face_locations(compressed_batch_images)
+
+            for j in range(len(batch_face_locations)):
+                face_locations = batch_face_locations[j]
+                image = batch_images[j]
+                file = files[j]
+                for index, face in enumerate(face_locations):
+                    face = tuple(scale_down * x for x in face)
+                    crop_face = image[face[0]:face[2], face[3]:face[1], :]
+                    face_file_name = os.path.join(self.face_dir, "__".join((str(index), os.path.split(file)[1])))
+                    cv2.imwrite(face_file_name, crop_face)
 
 
     def cluster_faces(self, clust_dir, no_of_clusters = 'Auto'):
