@@ -15,6 +15,7 @@ import cv2
 import face_recognition
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+import pickle
 
 
 class Segregator:
@@ -90,8 +91,7 @@ class Segregator:
                                                                             os.path.split(file)[1])))
                     cv2.imwrite(face_file_name, crop_face)
 
-
-    def cluster_faces(self, clust_dir, no_of_clusters = 'Auto'):
+    def cluster_faces(self, face_dir, encoding_pickle = None, no_of_clusters = 'Auto'):
         """
         It uses unsupervised method to cluster images. The purpose of this function is to help im manual tagging.
         By using this we will tagg the image which we will then used to classify
@@ -102,10 +102,34 @@ class Segregator:
         """
 
         # TODO
-        self.cluster_dir = os.path.join(self.directory, 'cluster_faces')
 
-        if not os.path.exists(self.cluster_dir):
-            os.makedirs(self.cluster_dir)
+        if encoding_pickle is not None:
+            with open(encoding_pickle, 'rb') as handle:
+                encoding = pickle.load(handle)
+        else:
+            face_list = [os.path.join(root, filename)
+                         for root, directories, filenames in os.walk(face_dir)
+                         for filename in filenames
+                         if filename.lower().endswith(('.jpg', '.jpeg'))]
+
+            encoding = {}
+
+            for face in face_list:
+                face_image = cv2.imread(face)
+                bbox = [(0, face_image.shape[1], face_image.shape[0], 0)]
+                encoding[face] = face_recognition.face_encodings(face_image, known_face_locations=bbox, num_jitters=10)
+
+            with open('face_encoding.pkl', 'wb') as handle:
+                pickle.dump(encoding, handle)
+
+
+
+
+
+        # self.cluster_dir = os.path.join(self.directory, 'cluster_faces')
+        #
+        # if not os.path.exists(self.cluster_dir):
+        #     os.makedirs(self.cluster_dir)
 
         return 0
 
